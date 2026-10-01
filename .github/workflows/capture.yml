@@ -7,7 +7,7 @@ on:
     # changes (see capture.py). GitHub's own scheduler is unreliable (late or skipped
     # runs), so an outside scheduler also starts a check every 10 minutes through
     # workflow_dispatch with mode=check. This schedule stays as a backup.
-    - cron: "3,13,23,33,43,53 * * * *"
+    - cron: "8,18,28,38,48,58 * * * *"
   workflow_dispatch:
     inputs:
       mode:
