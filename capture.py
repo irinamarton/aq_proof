@@ -2,20 +2,24 @@
 """
 Proof-of-publication capture.
 
-Every run:
-  1. opens the page in a real Chrome browser and saves a full-page screenshot,
-     a complete MHTML archive (HTML + images + CSS in one file) and the DOM;
-  2. checks that the configured PDF is linked from the page and saves a
-     screenshot with that link outlined;
-  3. downloads the PDF through the same browser session;
-  4. writes manifest.json with the SHA-256 of every file, the HTTP headers,
-     server IP and TLS certificate details;
-  5. gets manifest.json timestamped by independent RFC 3161 Time-Stamp
+Runs every 10 minutes (see .github/workflows/capture.yml). Every run:
+  1. QUICK CHECK: downloads the page's HTML exactly as the server sends it and
+     the PDF, checks that the PDF is linked on the page, and fingerprints both;
+  2. FULL CAPTURE, at the first run of every 6-hour block, on every manual run,
+     and whenever something looks different (page down, link missing, PDF
+     changed, page text changed): opens the page in a real Chrome browser and
+     saves a full-page screenshot, a complete MHTML copy, the rendered page and
+     a screenshot of the PDF link outlined;
+  3. writes manifest.json with the SHA-256 of every file, the HTTP headers and
+     server details, and the SHA-256 of the PREVIOUS run's manifest, so all
+     runs form one unbroken chain (a missing or edited record breaks it);
+  4. gets manifest.json timestamped by independent RFC 3161 Time-Stamp
      Authorities (so the time cannot be back-dated by anyone, including you);
-  6. asks the Internet Archive's Wayback Machine to make its own independent
-     capture of the page and the PDF;
-  7. asks archive.ph (archive.today) for a second independent copy of the page
-     (archive.ph cannot save PDFs).
+  5. about once an hour, asks the Internet Archive's Wayback Machine to make
+     its own independent copy of the page and the PDF;
+  6. marks the GitHub run as failed (GitHub then emails you) when the page goes
+     down, the PDF link disappears, or the PDF goes missing or changes; while a
+     problem lasts, it reminds you once per 6-hour block, not every 10 minutes.
 
 Settings live in config.toml. Run `python capture.py --help` for options.
 """
@@ -40,10 +44,11 @@ import traceback
 import urllib.error
 import urllib.parse
 import urllib.request
+from html.parser import HTMLParser
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-TOOL_VERSION = "1.0"
+TOOL_VERSION = "2.0"
 ROOT = Path(__file__).resolve().parent
 UTC = dt.timezone.utc
 TOOL_UA = f"proof-capture/{TOOL_VERSION} (+https://github.com)"
@@ -82,6 +87,7 @@ def run(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess:
 def http(url: str, data: bytes | None = None, headers: dict | None = None,
          timeout: int = 30, method: str | None = None):
     """Plain HTTP(S) request. Returns (status, headers, body, final_url); never raises on 4xx/5xx."""
+    url = urllib.parse.quote(url.strip(), safe=":/?#[]@!$&'()*+,;=%~")  # spaces etc.; keeps %XX as is
     req = urllib.request.Request(url, data=data, headers={"User-Agent": TOOL_UA, **(headers or {})},
                                  method=method)
     try:
@@ -108,13 +114,14 @@ def step_summary(md: str) -> None:
 
 
 def norm_url(u: str) -> str:
-    """Normalise a URL for comparison: lower-case scheme/host, decoded path, no #fragment."""
+    """Normalise a URL for comparison: http = https, www. ignored, decoded path, no #fragment."""
     p = urllib.parse.urlsplit(u.strip())
     netloc = p.netloc.lower()
     for default in (":443", ":80"):
         if netloc.endswith(default):
             netloc = netloc[: -len(default)]
-    return urllib.parse.urlunsplit((p.scheme.lower(), netloc,
+    netloc = netloc.removeprefix("www.")  # example.com and www.example.com count as the same site
+    return urllib.parse.urlunsplit(("https" if p.scheme.lower() in ("http", "https") else p.scheme.lower(), netloc,
                                     urllib.parse.unquote(p.path or "/"),
                                     urllib.parse.unquote_plus(p.query), ""))
 
@@ -147,6 +154,9 @@ def load_config(path: Path) -> dict:
 
 def ca_bundle(tmpdir: Path) -> Path:
     """Root certificates used to check timestamp tokens: tsa-certs/*.pem + the system trust store."""
+    out = tmpdir / "ca-bundle.pem"
+    if out.exists():
+        return out
     parts = []
     for p in sorted((ROOT / "tsa-certs").glob("*.pem")):
         parts.append(p.read_text())
@@ -161,8 +171,9 @@ def ca_bundle(tmpdir: Path) -> Path:
         if c and Path(c).is_file():
             parts.append(Path(c).read_text())
             break
-    out = tmpdir / "ca-bundle.pem"
-    out.write_text("\n".join(parts))
+    tmp = out.with_name(f"ca-bundle.{os.getpid()}.{id(parts)}.tmp")
+    tmp.write_text("\n".join(parts))
+    os.replace(tmp, out)  # atomic, so a parallel reader never sees half a file
     return out
 
 
@@ -279,12 +290,12 @@ def timestamp_manifest(manifest: Path, tsas: list[dict], out: Path, errors: list
 
 # ───────────────────────── Wayback Machine ─────────────────────────
 
-def wayback_due(state: Path, every_minutes: int, now: dt.datetime) -> bool:
+def wayback_due(last_utc: str | None, every_minutes: int, now: dt.datetime) -> bool:
     if every_minutes <= 0:
         return False
     try:
-        last = dt.datetime.fromisoformat(state.read_text().strip())
-    except (OSError, ValueError):
+        last = dt.datetime.fromisoformat(last_utc.replace("Z", "+00:00"))
+    except (AttributeError, ValueError):
         return True
     # a little slack because GitHub's scheduler starts runs a few minutes late
     return now - last >= dt.timedelta(minutes=every_minutes) - dt.timedelta(minutes=3)
@@ -349,76 +360,108 @@ def wayback_capture(urls: list[str], budget_s: int = 120) -> list[dict]:
     return jobs
 
 
-# ───────────────────────── archive.ph (archive.today) ─────────────────────────
-# archive.today has no official API: this does what its home-page form does, with
-# plain HTTP requests (none of archive.today's own scripts are run). It saves web
-# pages only, not PDFs, and it often answers automated requests with a captcha;
-# when that happens the capture simply records it and moves on.
+# ───────────────────────── quick check (every run) ─────────────────────────
+# The page's HTML exactly as the server sends it, and the PDF. No browser, so it
+# takes seconds; a full browser capture follows when needed (see main()).
 
-AT_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-         "(KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36")
-AT_BLOCKED = re.compile(r"g-recaptcha|h-captcha|hcaptcha|cf-chl|challenge-platform|One more step", re.I)
+BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+              "(KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36")
 
 
-def _at_blocked(status: int, text: str) -> bool:
-    return status == 429 or bool(AT_BLOCKED.search(text[:200000]))
+class _LinksAndText(HTMLParser):
+    SKIP = {"script", "style", "noscript", "template", "svg"}
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.links, self.text, self.base, self._skip = [], [], None, 0
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag in self.SKIP:
+            self._skip += 1
+        elif tag == "a" and a.get("href"):
+            self.links.append(a["href"].strip())
+        elif tag == "base" and a.get("href") and not self.base:
+            self.base = a["href"].strip()
+
+    def handle_endtag(self, tag):
+        if tag in self.SKIP and self._skip:
+            self._skip -= 1
+
+    def handle_data(self, data):
+        if not self._skip:
+            self.text.append(data)
 
 
-def archive_today_capture(url: str, base: str, budget_s: int = 120) -> dict:
-    base = base.rstrip("/")
-    job = {"url": url, "service": base, "submitted_utc": iso(utcnow())}
-    hdr = {"User-Agent": AT_UA, "Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
-           "Accept-Language": "en-US,en;q=0.9"}
-    captcha = "archive.ph asked for a captcha (it often does this to automated requests), so no copy this time"
+def _short(e: Exception) -> str:
+    if isinstance(e, urllib.error.URLError) and not isinstance(e, urllib.error.HTTPError):
+        return f"could not connect ({e.reason})"
+    return (str(e).splitlines() or [type(e).__name__])[0][:300]
+
+
+def _header(headers: dict, name: str) -> str:
+    return next((v for k, v in headers.items() if k.lower() == name.lower()), "")
+
+
+def quick_check(cfg: dict, out: Path, errors: list) -> dict:
+    page_url, pdf_url = cfg["target"]["page_url"], cfg["target"]["pdf_url"]
+    timeout = int(cfg.get("browser", {}).get("timeout_seconds", 60))
+    hdr = {"User-Agent": BROWSER_UA, "Accept-Language": "en-US,en;q=0.9",
+           "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"}
+    info: dict = {"page": {"url": page_url, "method": "plain HTTP request"},
+                  "pdf": {"url": pdf_url}, "pdf_link": {"found": False, "method": "page source"}}
+
+    t0 = utcnow()
     try:
-        status, h, body, final = http(base + "/", headers=hdr, timeout=40)
-        text = body.decode("utf-8", "replace")
-        if _at_blocked(status, text):
-            raise RuntimeError(captcha)
+        status, headers, body, final = http(page_url, headers=hdr, timeout=timeout)
+        (out / "page-source.html").write_bytes(body)
+        m = re.search(r"charset=([\w-]+)", _header(headers, "Content-Type"), re.I)
+        text = body.decode(m.group(1) if m else "utf-8", "replace")
+        parser = _LinksAndText()
+        parser.feed(text)
+        base = urllib.parse.urljoin(final, parser.base) if parser.base else final
+        links = [urllib.parse.urljoin(base, h) for h in parser.links]
+        want = norm_url(pdf_url)
+        found = [l for l in links if norm_url(l) == want]
+        visible = re.sub(r"\s+", " ", " ".join(parser.text)).strip()
+        title = re.search(r"<title[^>]*>(.*?)</title>", text, re.I | re.S)
+        info["page"].update(
+            loaded=True, requested_utc=iso(t0), received_utc=iso(utcnow()), http_status=status,
+            final_url=final, headers=headers, bytes=len(body),
+            title=re.sub(r"\s+", " ", title.group(1)).strip() if title else "",
+            text_sha256=hashlib.sha256(visible.encode()).hexdigest(),
+            dns=resolve(urllib.parse.urlsplit(final).hostname or ""))
+        info["pdf_link"].update(found=bool(found), links_on_page=len(links), matches=found[:5])
         if status >= 400:
-            raise RuntimeError(f"archive.ph home page answered HTTP {status}")
-        m = (re.search(r'name="submitid"[^>]*?value="([^"]+)"', text)
-             or re.search(r'value="([^"]+)"[^>]*?name="submitid"', text))
-        form = {"url": url, "anyway": "1", **({"submitid": m.group(1)} if m else {})}
-        status, h, body, final = http(
-            base + "/submit/", data=urllib.parse.urlencode(form).encode(), method="POST", timeout=120,
-            headers={**hdr, "Content-Type": "application/x-www-form-urlencoded", "Referer": base + "/"})
-        text = body.decode("utf-8", "replace")
-        if _at_blocked(status, text):
-            raise RuntimeError(captcha)
-
-        target = None
-        refresh = h.get("Refresh") or h.get("refresh") or ""
-        meta = re.search(r'http-equiv="refresh"[^>]*content="[^"]*url=([^"]+)"', text, re.I)
-        wip = re.search(re.escape(base) + r"/wip/[A-Za-z0-9]+", text)
-        for cand in (refresh, meta.group(1) if meta else "", final, wip.group(0) if wip else ""):
-            mm = re.search(r"(https?://[^\s;\"']+)", cand or "")
-            if mm and mm.group(1).startswith(base) and not re.search(r"/(submit/?)?(\?.*)?$", mm.group(1)):
-                target = mm.group(1)
-                break
-        if not target:
-            raise RuntimeError(f"archive.ph gave no snapshot link (HTTP {status})")
-        snap = target.replace("/wip/", "/")
-        job["snapshot_url"] = snap
-
-        # wait until archive.ph has finished building the copy
-        deadline = time.time() + budget_s
-        while True:
-            s, _, b, f = http(snap, headers=hdr, timeout=40)
-            if s == 200 and "/wip/" not in f and not _at_blocked(s, b.decode("utf-8", "replace")):
-                job["ready"] = True
-                job["ready_utc"] = iso(utcnow())
-                break
-            if time.time() >= deadline:
-                job["ready"] = False
-                job["note"] = "still being built when the run ended; the link should work a few minutes later"
-                break
-            time.sleep(8)
-    except urllib.error.URLError as e:
-        job["error"] = f"archive.ph could not be reached ({e.reason})"
+            errors.append(f"page answered HTTP {status}")
     except Exception as e:
-        job["error"] = str(e)
-    return job
+        info["page"].update(loaded=False, requested_utc=iso(t0), error=_short(e))
+        errors.append(f"page did not load: {_short(e)}")
+
+    t1 = utcnow()
+    try:
+        status, headers, body, final = http(
+            pdf_url, timeout=timeout * 2,
+            headers={**hdr, "Accept": "application/pdf,*/*;q=0.8", "Referer": page_url})
+        is_pdf = body[:5] == b"%PDF-"
+        fname = "document.pdf" if is_pdf else "pdf-response.bin"
+        (out / fname).write_bytes(body)
+        m = re.search(r'filename\*?=(?:UTF-8\'\')?"?([^";]+)', _header(headers, "Content-Disposition"), re.I)
+        info["pdf"].update(
+            requested_utc=iso(t1), received_utc=iso(utcnow()), http_status=status, final_url=final,
+            headers=headers, bytes=len(body), is_pdf=is_pdf, saved_as=fname,
+            sha256=hashlib.sha256(body).hexdigest(),
+            original_filename=urllib.parse.unquote(m.group(1) if m else
+                                                   Path(urllib.parse.urlsplit(final).path).name),
+            dns=resolve(urllib.parse.urlsplit(final).hostname or ""))
+        if status >= 400:
+            errors.append(f"PDF answered HTTP {status}")
+        elif not is_pdf:
+            errors.append("the PDF link did not return a PDF file")
+    except Exception as e:
+        info["pdf"].update(requested_utc=iso(t1), error=_short(e))
+        errors.append(f"PDF download failed: {_short(e)}")
+    return info
 
 
 # ───────────────────────── the browser part ─────────────────────────
@@ -477,7 +520,8 @@ def capture_browser(cfg: dict, out: Path, errors: list) -> dict:
 
     page_url, pdf_url = cfg["target"]["page_url"], cfg["target"]["pdf_url"]
     b = cfg.get("browser", {})
-    info: dict = {"page": {"url": page_url}, "pdf": {"url": pdf_url}, "pdf_link": {"found": False}}
+    info: dict = {"page": {"url": page_url, "method": "Chrome browser"},
+                  "pdf_link": {"found": False, "method": "rendered page"}}
 
     with sync_playwright() as pw:
         browser, engine = launch(pw)
@@ -575,34 +619,7 @@ def capture_browser(cfg: dict, out: Path, errors: list) -> dict:
                 except Exception as e:
                     errors.append(f"link screenshot failed: {e}")
             else:
-                errors.append("the PDF link was NOT found on the page")
-
-        # ── download the PDF through the same browser session ──
-        t1 = utcnow()
-        try:
-            r = context.request.get(pdf_url, timeout=int(b.get("timeout_seconds", 60)) * 2000,
-                                    max_redirects=10,
-                                    headers={"Referer": page_url if page.url.startswith("about:") else page.url})
-            body = r.body()
-            headers = r.headers
-            is_pdf = body[:5] == b"%PDF-"
-            fname = "document.pdf" if is_pdf else "pdf-response.bin"
-            (out / fname).write_bytes(body)
-            cd = headers.get("content-disposition", "")
-            m = re.search(r'filename\*?=(?:UTF-8\'\')?"?([^";]+)', cd, re.I)
-            info["pdf"].update(
-                requested_utc=iso(t1), received_utc=iso(utcnow()), http_status=r.status,
-                final_url=r.url, headers=headers, bytes=len(body), is_pdf=is_pdf, saved_as=fname,
-                original_filename=urllib.parse.unquote(m.group(1)) if m else
-                urllib.parse.unquote(Path(urllib.parse.urlsplit(r.url).path).name),
-                dns=resolve(urllib.parse.urlsplit(r.url).hostname or ""))
-            if r.status >= 400:
-                errors.append(f"PDF answered HTTP {r.status}")
-            elif not is_pdf:
-                errors.append("the PDF URL did not return a PDF file")
-        except Exception as e:
-            info["pdf"].update(requested_utc=iso(t1), error=str(e).splitlines()[0])
-            errors.append(f"PDF download failed: {str(e).splitlines()[0]}")
+                errors.append("the PDF link was NOT found on the page (checked in the browser too)")
 
         context.close()
         browser.close()
@@ -611,15 +628,63 @@ def capture_browser(cfg: dict, out: Path, errors: list) -> dict:
 
 # ───────────────────────── main ─────────────────────────
 
-LOG_FIELDS = ["capture_utc", "capture_local", "folder", "page_http", "pdf_linked", "pdf_http",
-              "pdf_sha256", "screenshot_sha256", "manifest_sha256", "timestamps", "wayback", "archive_ph",
-              "problems"]
+LOG_FIELDS = ["capture_utc", "capture_local", "type", "folder", "page_http", "pdf_linked", "pdf_http",
+              "pdf_sha256", "pdf_changed", "page_text_changed", "screenshot_sha256", "manifest_sha256",
+              "previous_manifest_sha256", "timestamps", "wayback", "alerts", "problems"]
+
+NOTES = {
+    "page-source.html": "the page's HTML exactly as the server sent it, before any scripts ran",
+    "document.pdf": "the PDF exactly as the server sent it",
+    "pdf-response.bin": "what the PDF link returned (it was not a PDF file)",
+    "page.png": "full-page screenshot of the page as loaded in Chrome",
+    "page.mhtml": "complete copy of the page as loaded in Chrome (open in Chrome or Edge)",
+    "page.html": "the page's HTML after its scripts ran in Chrome",
+    "link-in-context.png": "the PDF link on the page; the red outline and caption bar were added by "
+                           "this tool AFTER the other files were saved",
+}
+
+
+def load_state(path: Path) -> dict:
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def minutes_since(value: str | None, now: dt.datetime) -> float:
+    try:
+        return (now - dt.datetime.fromisoformat(value.replace("Z", "+00:00"))).total_seconds() / 60
+    except (AttributeError, ValueError):
+        return float("inf")
+
+
+def block_of(t: dt.datetime, hours: int) -> str:
+    return f"{t:%Y-%m-%d}/{t.hour // hours}"
+
+
+def write_log(logf: Path, row: dict) -> None:
+    if logf.exists():  # add any new columns to an older log
+        with open(logf, newline="") as f:
+            rows = list(csv.DictReader(f))
+            old = rows[0].keys() if rows else None
+        if old is not None and list(old) != LOG_FIELDS:
+            with open(logf, "w", newline="") as f:
+                w = csv.DictWriter(f, fieldnames=LOG_FIELDS, extrasaction="ignore")
+                w.writeheader()
+                w.writerows(rows)
+    new = not logf.exists()
+    with open(logf, "a", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=LOG_FIELDS)
+        if new:
+            w.writeheader()
+        w.writerow(row)
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--config", type=Path, default=ROOT / "config.toml")
-    ap.add_argument("--ignore-window", action="store_true", help="capture now even outside the time window")
+    ap.add_argument("--ignore-window", action="store_true", help="run now even outside the time window")
+    ap.add_argument("--full", action="store_true", help="always do a full browser capture")
     ap.add_argument("--archive", type=Path, default=ROOT / "archive", help="where captures are written")
     args = ap.parse_args()
 
@@ -639,155 +704,211 @@ def main() -> int:
             set_output(status="ended")
             return 0
 
-    stamp = now.strftime("%H%M%SZ")
-    out = args.archive / now.strftime("%Y-%m-%d") / stamp
+    full_every = int(cfg.get("checks", {}).get("full_capture_every_hours", 6))
+    if full_every not in (1, 2, 3, 4, 6, 8, 12, 24):
+        full_every = 6
+    args.archive.mkdir(parents=True, exist_ok=True)
+    state_path = args.archive / ".state.json"
+    state = load_state(state_path)
+
+    out = args.archive / now.strftime("%Y-%m-%d") / now.strftime("%H%M%SZ")
     out.mkdir(parents=True, exist_ok=False)
+    folder = out.relative_to(args.archive).as_posix()
     rel = out.relative_to(args.archive.parent) if args.archive.parent in out.parents else out
-    log(f"Capture {iso(now)}  →  {rel}")
+    log(f"Run {iso(now)}  →  {rel}")
     errors: list[str] = []
 
-    # 1–3. browser capture
-    try:
-        info = capture_browser(cfg, out, errors)
-    except Exception as e:
-        traceback.print_exc()
-        errors.append(f"browser capture crashed: {e}")
-        info = {"page": {"url": cfg["target"]["page_url"]}, "pdf": {"url": cfg["target"]["pdf_url"]},
-                "pdf_link": {"found": False}}
+    # 1. quick check
+    info = quick_check(cfg, out, errors)
+    page_ok = info["page"].get("loaded") and info["page"].get("http_status", 999) < 400
+    pdf = info["pdf"]
+    pdf_ok = pdf.get("is_pdf") and pdf.get("http_status", 999) < 400
+    prev_pdf, pdf_sha = state.get("pdf_sha256"), pdf.get("sha256") if pdf_ok else None
+    pdf_changed = bool(prev_pdf and pdf_sha and pdf_sha != prev_pdf)
+    prev_text, text_sha = state.get("page_text_sha256"), info["page"].get("text_sha256") if page_ok else None
+    text_changed = bool(prev_text and text_sha and text_sha != prev_text)
+    log(f"  quick check: page HTTP {info['page'].get('http_status', '—')}, "
+        f"PDF link {'found' if info['pdf_link']['found'] else 'NOT found'} in page source, "
+        f"PDF HTTP {pdf.get('http_status', '—')}"
+        f"{', PDF CHANGED' if pdf_changed else ''}{', page text changed' if text_changed else ''}")
+
+    # 2. full capture when it's due or something looks different
+    reasons = []
+    if args.full:
+        reasons.append("manual run")
+    new_block = state.get("last_full_block") != block_of(now, full_every)
+    if new_block:
+        reasons.append(f"first run in this {full_every}-hour block")
+    if not page_ok:
+        reasons.append("page problem")
+    elif not info["pdf_link"]["found"]:
+        reasons.append("PDF link not found in page source")
+    if not pdf_ok:
+        reasons.append("PDF problem")
+    if pdf_changed:
+        reasons.append("PDF changed")
+    if text_changed and minutes_since(state.get("last_text_full_utc"), now) >= 60:
+        reasons.append("page text changed")
+    if state.get("last_alerts") and page_ok and pdf_ok and info["pdf_link"]["found"]:
+        reasons.append("back to normal after a problem")
+    full = bool(reasons)
+
+    if full:
+        log(f"Full browser capture ({'; '.join(reasons)})")
+        quick = info
+        try:
+            b = capture_browser(cfg, out, errors)
+        except Exception as e:
+            traceback.print_exc()
+            errors.append(f"browser capture crashed: {e}")
+            b = {"page": {"url": cfg["target"]["page_url"], "loaded": False, "error": str(e)},
+                 "pdf_link": {"found": False}}
+        info = {"page": b["page"], "page_source": quick["page"], "pdf_link": b["pdf_link"],
+                "pdf_link_in_page_source": quick["pdf_link"], "pdf": quick["pdf"], "browser": b.get("browser")}
+        # the page is up / the link is there if EITHER the plain request or the browser saw it
+        page_ok = page_ok or (b["page"].get("loaded") and b["page"].get("http_status", 999) < 400)
+        link_found = quick["pdf_link"]["found"] or b["pdf_link"].get("found", False)
+    else:
+        link_found = info["pdf_link"]["found"]
     finished = utcnow()
 
-    # 4. manifest
+    alerts = []
+    if not page_ok:
+        alerts.append("page down or not loading")
+    elif not link_found:
+        alerts.append("PDF link missing from the page")
+    if not pdf_ok:
+        alerts.append("PDF missing or not loading")
+    if pdf_changed:
+        alerts.append("PDF changed since the previous run")
+
+    errors[:] = list(dict.fromkeys(errors))  # the quick check and the browser may report the same thing
+
+    # 3. manifest, chained to the previous run
     files = {}
     for p in sorted(out.rglob("*")):
         if p.is_file():
-            files[str(p.relative_to(out))] = {"sha256": sha256_file(p), "bytes": p.stat().st_size}
+            files[p.relative_to(out).as_posix()] = {"sha256": sha256_file(p), "bytes": p.stat().st_size}
     gh = {k: os.environ.get(k) for k in ("GITHUB_REPOSITORY", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT",
                                          "GITHUB_SHA", "GITHUB_EVENT_NAME", "RUNNER_NAME")}
     run_url = (f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/{gh['GITHUB_REPOSITORY']}"
                f"/actions/runs/{gh['GITHUB_RUN_ID']}") if gh["GITHUB_RUN_ID"] else None
+    previous = state.get("chain_head")
     manifest = {
         "about": "Evidence that the page and the linked PDF were publicly served at the time below. "
-                 "The SHA-256 of this file is signed by independent RFC 3161 Time-Stamp Authorities "
-                 "(see timestamps/). Check with: python verify.py <this folder>",
+                 "previous_record names the previous run and the SHA-256 of its manifest.json, so all runs "
+                 "form one unbroken chain. The SHA-256 of this file is signed by independent RFC 3161 "
+                 "Time-Stamp Authorities (see timestamps/). Check everything with: python verify.py archive",
         "tool": f"proof-capture {TOOL_VERSION}",
+        "type": "full" if full else "check",
+        "full_capture_reasons": reasons,
+        "previous_record": previous,
         "capture_started_utc": iso(now),
         "capture_finished_utc": iso(finished),
         "capture_started_local": now.astimezone(tz).isoformat(timespec="seconds"),
         "window": {"start": start.isoformat(), "end": end.isoformat(), "ignored": args.ignore_window},
         "target": cfg["target"],
         **info,
+        "pdf_changed_since_previous_run": pdf_changed,
+        "page_text_changed_since_previous_run": text_changed,
+        "alerts": alerts,
         "files": files,
-        "notes": {
-            "page.png": "full-page screenshot of the page as loaded",
-            "page.mhtml": "complete archive of the page (open in Chrome/Edge)",
-            "page.html": "page HTML (DOM) after scripts ran",
-            "link-in-context.png": "the PDF link on the page; the red outline was added by this tool AFTER the other files were saved",
-            "document.pdf": "the PDF exactly as the server sent it",
-        },
+        "notes": {k: v for k, v in NOTES.items() if k in files},
         "problems": errors,
         "runner": {"github": gh, "run_url": run_url, "os": platform.platform(), "python": platform.python_version()},
     }
     mpath = out / "manifest.json"
     mpath.write_text(json.dumps(manifest, indent=2, ensure_ascii=False, default=str))
-    (out / "SHA256SUMS").write_text(
-        "".join(f"{v['sha256']}  {k}\n" for k, v in {**files, "manifest.json": {"sha256": sha256_file(mpath)}}.items()))
     manifest_hash = sha256_file(mpath)
-
-    log(f"  page:   HTTP {info['page'].get('http_status', '—')}  {info['page'].get('title', '')!r}")
-    log(f"  link:   {'found on page' if info['pdf_link'].get('found') else 'NOT FOUND on page'}")
-    log(f"  pdf:    HTTP {info['pdf'].get('http_status', '—')}  {info['pdf'].get('bytes', 0):,} bytes")
+    (out / "SHA256SUMS").write_text("".join(f"{v['sha256']}  {k}\n" for k, v in files.items())
+                                    + f"{manifest_hash}  manifest.json\n")
     for name, v in files.items():
         log(f"  sha256  {v['sha256']}  {name}")
     log(f"  sha256  {manifest_hash}  manifest.json")
+    if previous:
+        log(f"  chained to {previous.get('folder')} ({previous.get('manifest_sha256', '')[:16]}…)")
 
-    # 5. trusted timestamps
+    # 4. trusted timestamps
     log("Timestamping manifest.json")
     tsas = cfg.get("tsa", [])
     ensure_tsa_roots(tsas)
     ts = timestamp_manifest(mpath, tsas, out, errors)
     if not any(t["ok"] for t in ts):
-        errors.append("NO timestamp authority answered — this capture has no trusted time")
+        errors.append("NO timestamp authority answered — this run has no trusted time")
 
-    # 6. Wayback Machine (independent third-party copy)
+    # 5. Wayback Machine (independent third-party copy)
     wb_cfg = cfg.get("wayback", {})
-    state = args.archive / ".wayback-last"
     wb = []
-    if wayback_due(state, int(wb_cfg.get("every_minutes", 60)), now):
+    if wayback_due(state.get("wayback_last_utc"), int(wb_cfg.get("every_minutes", 60)), now):
         log("Asking the Wayback Machine to capture the page and the PDF")
         wb = wayback_capture([cfg["target"]["page_url"], cfg["target"]["pdf_url"]],
                              int(wb_cfg.get("wait_seconds", 120)))
         (out / "wayback.json").write_text(json.dumps(wb, indent=2))
         for j in wb:
             log(f"  {j.get('snapshot_url') or 'failed: ' + j.get('error', '?')}")
-        if any("snapshot_url" in j for j in wb):
-            state.write_text(iso(now))
+    wb_problems = [f"wayback {j['url']}: {j['error']}" for j in wb if "error" in j]
 
-    # 7. archive.ph — a second independent copy of the page (archive.ph can't save PDFs)
-    at_cfg = cfg.get("archive_today", {})
-    at = []
-    if at_cfg.get("enabled", True):
-        log("Asking archive.ph to capture the page")
-        at = [archive_today_capture(cfg["target"]["page_url"], at_cfg.get("url", "https://archive.ph"),
-                                    int(at_cfg.get("wait_seconds", 120)))]
-        (out / "archive-today.json").write_text(json.dumps(at, indent=2))
-        for j in at:
-            if "error" in j:
-                log(f"  failed: {j['error']}")
-            else:
-                log(f"  {j['snapshot_url']}{'' if j.get('ready') else '  (still being built)'}")
-
-    archive_problems = ([f"wayback {j['url']}: {j['error']}" for j in wb if "error" in j]
-                        + [f"archive.ph: {j['error']}" for j in at if "error" in j])
-
-    # log.csv — one line per capture
-    logf = args.archive / "log.csv"
-    if logf.exists():  # add any new columns to an older log
-        with open(logf, newline="") as f:
-            rows = list(csv.DictReader(f))
-            old_fields = rows and list(rows[0].keys()) or None
-        if old_fields is not None and old_fields != LOG_FIELDS:
-            with open(logf, "w", newline="") as f:
-                w = csv.DictWriter(f, fieldnames=LOG_FIELDS, extrasaction="ignore")
-                w.writeheader()
-                w.writerows(rows)
-    new = not logf.exists()
-    with open(logf, "a", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=LOG_FIELDS)
-        if new:
-            w.writeheader()
-        w.writerow({
-            "capture_utc": iso(now), "capture_local": now.astimezone(tz).isoformat(timespec="seconds"),
-            "folder": str(out.relative_to(args.archive)),
-            "page_http": info["page"].get("http_status", "error"),
-            "pdf_linked": "yes" if info["pdf_link"].get("found") else "NO",
-            "pdf_http": info["pdf"].get("http_status", "error"),
-            "pdf_sha256": files.get("document.pdf", {}).get("sha256", ""),
-            "screenshot_sha256": files.get("page.png", {}).get("sha256", ""),
-            "manifest_sha256": manifest_hash,
-            "timestamps": " ".join(f"{t['tsa']}={t.get('time_utc')}" for t in ts if t["ok"]) or "NONE",
-            "wayback": " ".join(j["snapshot_url"] for j in wb if "snapshot_url" in j),
-            "archive_ph": " ".join(j["snapshot_url"] for j in at if "snapshot_url" in j),
-            "problems": "; ".join(errors + archive_problems),
-        })
+    # 6. remember where we are
+    state["chain_head"] = {"folder": folder, "manifest_sha256": manifest_hash, "capture_utc": iso(now)}
+    if pdf_sha:
+        state["pdf_sha256"] = pdf_sha
+    if text_sha:
+        state["page_text_sha256"] = text_sha
+    if full and (out / "page.png").exists():
+        state["last_full_block"] = block_of(now, full_every)
+        state["last_full_utc"] = iso(now)
+        if "page text changed" in reasons:
+            state["last_text_full_utc"] = iso(now)
+    if any("snapshot_url" in j for j in wb):
+        state["wayback_last_utc"] = iso(now)
+    # email (via a failed run) when a problem starts or changes, and as a reminder
+    # once per block while it lasts, rather than every 10 minutes
+    notify = bool(alerts) and (sorted(alerts) != sorted(state.get("last_alerts") or []) or new_block)
+    state["last_alerts"] = alerts
+    state_path.write_text(json.dumps(state, indent=2))
 
     ok_ts = [t for t in ts if t["ok"]]
+    write_log(args.archive / "log.csv", {
+        "capture_utc": iso(now), "capture_local": now.astimezone(tz).isoformat(timespec="seconds"),
+        "type": "full" if full else "check", "folder": folder,
+        "page_http": info["page"].get("http_status", "error"),
+        "pdf_linked": "yes" if link_found else "NO",
+        "pdf_http": pdf.get("http_status", "error"),
+        "pdf_sha256": pdf.get("sha256", ""),
+        "pdf_changed": "YES" if pdf_changed else "",
+        "page_text_changed": "yes" if text_changed else "",
+        "screenshot_sha256": files.get("page.png", {}).get("sha256", ""),
+        "manifest_sha256": manifest_hash,
+        "previous_manifest_sha256": (previous or {}).get("manifest_sha256", ""),
+        "timestamps": " ".join(f"{t['tsa']}={t.get('time_utc')}" for t in ok_ts) or "NONE",
+        "wayback": " ".join(j["snapshot_url"] for j in wb if "snapshot_url" in j),
+        "alerts": "; ".join(alerts),
+        "problems": "; ".join(errors + wb_problems),
+    })
+
+    problems = errors + wb_problems
     step_summary(
-        f"### Capture {iso(now)}\n\n"
-        f"| | |\n|---|---|\n"
+        f"### {'Full capture' if full else 'Check'} {iso(now)}\n\n"
+        + (f"**⚠ ALERT: {'; '.join(alerts)}**\n\n" if alerts else "")
+        + "| | |\n|---|---|\n"
         f"| Page | HTTP {info['page'].get('http_status', '—')} — {info['page'].get('title', '')} |\n"
-        f"| PDF linked on page | {'yes' if info['pdf_link'].get('found') else '**NO**'} |\n"
-        f"| PDF | HTTP {info['pdf'].get('http_status', '—')}, {info['pdf'].get('bytes', 0):,} bytes |\n"
-        f"| manifest.json SHA-256 | `{manifest_hash}` |\n"
+        f"| PDF linked on page | {'yes' if link_found else '**NO**'} |\n"
+        f"| PDF | HTTP {pdf.get('http_status', '—')}, {pdf.get('bytes', 0):,} bytes"
+        f"{' — **changed**' if pdf_changed else ''} |\n"
+        + (f"| Full capture because | {'; '.join(reasons)} |\n" if full else "")
+        + f"| manifest.json SHA-256 | `{manifest_hash}` |\n"
+        f"| Previous record | {(previous or {}).get('folder', '— (first record)')} |\n"
         + "".join(f"| Timestamp ({t['tsa']}) | {t.get('time_utc')} |\n" for t in ok_ts)
         + "".join(f"| Wayback ({'PDF' if j['url'] == cfg['target']['pdf_url'] else 'page'}) | "
                   f"{j.get('snapshot_url') or 'failed: ' + j.get('error', '?')} |\n" for j in wb)
-        + "".join(f"| archive.ph (page) | "
-                  f"{j.get('snapshot_url') or 'failed: ' + j.get('error', '?')} |\n" for j in at)
-        + (f"\n**Problems:** {'; '.join(errors + archive_problems)}\n" if errors or archive_problems else ""))
+        + (f"\n**Problems:** {'; '.join(problems)}\n" if problems else ""))
 
-    if errors or archive_problems:
-        log("Problems: " + "; ".join(errors + archive_problems))
-    set_output(status="captured", folder=str(rel), stamp=iso(now))
+    if problems:
+        log("Problems: " + "; ".join(problems))
+    if alerts:
+        log("ALERT: " + "; ".join(alerts) + ("" if notify else "  (ongoing — already reported)"))
+    set_output(status="captured", folder=str(rel), stamp=iso(now), type="full" if full else "check",
+               alert="true" if notify else "false", alert_reason="; ".join(alerts))
     return 0
 
 
