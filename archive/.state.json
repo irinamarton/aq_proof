@@ -1,8 +1,8 @@
 {
   "chain_head": {
-    "folder": "2026-10-01/222812Z",
-    "manifest_sha256": "cf619d40d114120e02b78256107765af5ea5fd59f38a6de999e0b7e6c29f2319",
-    "capture_utc": "2026-10-01T22:28:12.576Z"
+    "folder": "2026-10-01/231509Z",
+    "manifest_sha256": "6b1f4604212e6e6dc23e6ca2953412cddc4c1cc8fba517191a56af860cc28915",
+    "capture_utc": "2026-10-01T23:15:09.858Z"
   },
   "pdf_sha256": "57c1c3044332ef7c3a5ca8bfb2a19c5f966d3dec1848dee4dc0f7f715267d2cb",
   "page_text_sha256": "d90d60ccf114b14f6be8175b6f5ec00ca3262ba4e755fe88492080045489cc82",
