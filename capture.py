@@ -12,8 +12,10 @@ Every run:
      server IP and TLS certificate details;
   5. gets manifest.json timestamped by independent RFC 3161 Time-Stamp
      Authorities (so the time cannot be back-dated by anyone, including you);
-  6. on a slower cadence, asks the Internet Archive's Wayback Machine to make
-     its own independent capture of the page and the PDF.
+  6. asks the Internet Archive's Wayback Machine to make its own independent
+     capture of the page and the PDF;
+  7. asks archive.ph (archive.today) for a second independent copy of the page
+     (archive.ph cannot save PDFs).
 
 Settings live in config.toml. Run `python capture.py --help` for options.
 """
@@ -347,6 +349,78 @@ def wayback_capture(urls: list[str], budget_s: int = 120) -> list[dict]:
     return jobs
 
 
+# ───────────────────────── archive.ph (archive.today) ─────────────────────────
+# archive.today has no official API: this does what its home-page form does, with
+# plain HTTP requests (none of archive.today's own scripts are run). It saves web
+# pages only, not PDFs, and it often answers automated requests with a captcha;
+# when that happens the capture simply records it and moves on.
+
+AT_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+         "(KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36")
+AT_BLOCKED = re.compile(r"g-recaptcha|h-captcha|hcaptcha|cf-chl|challenge-platform|One more step", re.I)
+
+
+def _at_blocked(status: int, text: str) -> bool:
+    return status == 429 or bool(AT_BLOCKED.search(text[:200000]))
+
+
+def archive_today_capture(url: str, base: str, budget_s: int = 120) -> dict:
+    base = base.rstrip("/")
+    job = {"url": url, "service": base, "submitted_utc": iso(utcnow())}
+    hdr = {"User-Agent": AT_UA, "Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
+           "Accept-Language": "en-US,en;q=0.9"}
+    captcha = "archive.ph asked for a captcha (it often does this to automated requests), so no copy this time"
+    try:
+        status, h, body, final = http(base + "/", headers=hdr, timeout=40)
+        text = body.decode("utf-8", "replace")
+        if _at_blocked(status, text):
+            raise RuntimeError(captcha)
+        if status >= 400:
+            raise RuntimeError(f"archive.ph home page answered HTTP {status}")
+        m = (re.search(r'name="submitid"[^>]*?value="([^"]+)"', text)
+             or re.search(r'value="([^"]+)"[^>]*?name="submitid"', text))
+        form = {"url": url, "anyway": "1", **({"submitid": m.group(1)} if m else {})}
+        status, h, body, final = http(
+            base + "/submit/", data=urllib.parse.urlencode(form).encode(), method="POST", timeout=120,
+            headers={**hdr, "Content-Type": "application/x-www-form-urlencoded", "Referer": base + "/"})
+        text = body.decode("utf-8", "replace")
+        if _at_blocked(status, text):
+            raise RuntimeError(captcha)
+
+        target = None
+        refresh = h.get("Refresh") or h.get("refresh") or ""
+        meta = re.search(r'http-equiv="refresh"[^>]*content="[^"]*url=([^"]+)"', text, re.I)
+        wip = re.search(re.escape(base) + r"/wip/[A-Za-z0-9]+", text)
+        for cand in (refresh, meta.group(1) if meta else "", final, wip.group(0) if wip else ""):
+            mm = re.search(r"(https?://[^\s;\"']+)", cand or "")
+            if mm and mm.group(1).startswith(base) and not re.search(r"/(submit/?)?(\?.*)?$", mm.group(1)):
+                target = mm.group(1)
+                break
+        if not target:
+            raise RuntimeError(f"archive.ph gave no snapshot link (HTTP {status})")
+        snap = target.replace("/wip/", "/")
+        job["snapshot_url"] = snap
+
+        # wait until archive.ph has finished building the copy
+        deadline = time.time() + budget_s
+        while True:
+            s, _, b, f = http(snap, headers=hdr, timeout=40)
+            if s == 200 and "/wip/" not in f and not _at_blocked(s, b.decode("utf-8", "replace")):
+                job["ready"] = True
+                job["ready_utc"] = iso(utcnow())
+                break
+            if time.time() >= deadline:
+                job["ready"] = False
+                job["note"] = "still being built when the run ended; the link should work a few minutes later"
+                break
+            time.sleep(8)
+    except urllib.error.URLError as e:
+        job["error"] = f"archive.ph could not be reached ({e.reason})"
+    except Exception as e:
+        job["error"] = str(e)
+    return job
+
+
 # ───────────────────────── the browser part ─────────────────────────
 
 LINKS_JS = """() => Array.from(document.querySelectorAll('a[href]')).map((a, i) => {
@@ -538,7 +612,8 @@ def capture_browser(cfg: dict, out: Path, errors: list) -> dict:
 # ───────────────────────── main ─────────────────────────
 
 LOG_FIELDS = ["capture_utc", "capture_local", "folder", "page_http", "pdf_linked", "pdf_http",
-              "pdf_sha256", "screenshot_sha256", "manifest_sha256", "timestamps", "wayback", "problems"]
+              "pdf_sha256", "screenshot_sha256", "manifest_sha256", "timestamps", "wayback", "archive_ph",
+              "problems"]
 
 
 def main() -> int:
@@ -647,8 +722,34 @@ def main() -> int:
         if any("snapshot_url" in j for j in wb):
             state.write_text(iso(now))
 
+    # 7. archive.ph — a second independent copy of the page (archive.ph can't save PDFs)
+    at_cfg = cfg.get("archive_today", {})
+    at = []
+    if at_cfg.get("enabled", True):
+        log("Asking archive.ph to capture the page")
+        at = [archive_today_capture(cfg["target"]["page_url"], at_cfg.get("url", "https://archive.ph"),
+                                    int(at_cfg.get("wait_seconds", 120)))]
+        (out / "archive-today.json").write_text(json.dumps(at, indent=2))
+        for j in at:
+            if "error" in j:
+                log(f"  failed: {j['error']}")
+            else:
+                log(f"  {j['snapshot_url']}{'' if j.get('ready') else '  (still being built)'}")
+
+    archive_problems = ([f"wayback {j['url']}: {j['error']}" for j in wb if "error" in j]
+                        + [f"archive.ph: {j['error']}" for j in at if "error" in j])
+
     # log.csv — one line per capture
     logf = args.archive / "log.csv"
+    if logf.exists():  # add any new columns to an older log
+        with open(logf, newline="") as f:
+            rows = list(csv.DictReader(f))
+            old_fields = rows and list(rows[0].keys()) or None
+        if old_fields is not None and old_fields != LOG_FIELDS:
+            with open(logf, "w", newline="") as f:
+                w = csv.DictWriter(f, fieldnames=LOG_FIELDS, extrasaction="ignore")
+                w.writeheader()
+                w.writerows(rows)
     new = not logf.exists()
     with open(logf, "a", newline="") as f:
         w = csv.DictWriter(f, fieldnames=LOG_FIELDS)
@@ -665,7 +766,8 @@ def main() -> int:
             "manifest_sha256": manifest_hash,
             "timestamps": " ".join(f"{t['tsa']}={t.get('time_utc')}" for t in ts if t["ok"]) or "NONE",
             "wayback": " ".join(j["snapshot_url"] for j in wb if "snapshot_url" in j),
-            "problems": "; ".join(errors + [f"wayback {j['url']}: {j['error']}" for j in wb if "error" in j]),
+            "archive_ph": " ".join(j["snapshot_url"] for j in at if "snapshot_url" in j),
+            "problems": "; ".join(errors + archive_problems),
         })
 
     ok_ts = [t for t in ts if t["ok"]]
@@ -677,11 +779,14 @@ def main() -> int:
         f"| PDF | HTTP {info['pdf'].get('http_status', '—')}, {info['pdf'].get('bytes', 0):,} bytes |\n"
         f"| manifest.json SHA-256 | `{manifest_hash}` |\n"
         + "".join(f"| Timestamp ({t['tsa']}) | {t.get('time_utc')} |\n" for t in ok_ts)
-        + "".join(f"| Wayback | {j['snapshot_url']} |\n" for j in wb if "snapshot_url" in j)
-        + (f"\n**Problems:** {'; '.join(errors)}\n" if errors else ""))
+        + "".join(f"| Wayback ({'PDF' if j['url'] == cfg['target']['pdf_url'] else 'page'}) | "
+                  f"{j.get('snapshot_url') or 'failed: ' + j.get('error', '?')} |\n" for j in wb)
+        + "".join(f"| archive.ph (page) | "
+                  f"{j.get('snapshot_url') or 'failed: ' + j.get('error', '?')} |\n" for j in at)
+        + (f"\n**Problems:** {'; '.join(errors + archive_problems)}\n" if errors or archive_problems else ""))
 
-    if errors:
-        log("Problems: " + "; ".join(errors))
+    if errors or archive_problems:
+        log("Problems: " + "; ".join(errors + archive_problems))
     set_output(status="captured", folder=str(rel), stamp=iso(now))
     return 0
 
