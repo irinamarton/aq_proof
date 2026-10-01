@@ -14,7 +14,7 @@ pdf_url  = "https://www.aquila.ro/s/Proiect_Fuziune_Aquila_30_09_2026_execution.
 #    schedule switches itself off. At 4 a day a long window is still free.
 [window]
 timezone = "Europe/Bucharest"
-start    = "2026-10-02 08:00"
+start    = "2026-10-01 21:30"
 end      = "2026-11-02 08:00"
 
 # Browser settings — the defaults are fine for most sites
