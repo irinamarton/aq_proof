@@ -1,0 +1,77 @@
+name: Capture page + PDF
+
+on:
+  schedule:
+    # 4 times a day, every 6 hours: 00:07, 06:07, 12:07 and 18:07 UTC
+    #   = 03:07, 09:07, 15:07, 21:07 in Romania in summer time (UTC+3)
+    #   = 02:07, 08:07, 14:07, 20:07 in Romania in winter time (UTC+2, from 25 Oct 2026)
+    # GitHub reads this in UTC. The window in config.toml decides whether a run
+    # actually captures. Minute 7 avoids the busy top of the hour, when GitHub
+    # most often delays or drops scheduled runs.
+    # Other times: change the hours, e.g. "7 6,10,14,18 * * *" for 4 daytime captures.
+    - cron: "7 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      ignore_window:
+        description: "Capture now, even outside the window in config.toml (use this for a test run)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write   # commit each capture to this repository
+  actions: write    # switch the schedule off once the window has ended
+
+concurrency:
+  group: proof-capture
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Only check out the scripts and the log, not the (large) archive itself.
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /*
+            !/archive/*/
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install Playwright (uses the runner's preinstalled Google Chrome)
+        run: |
+          pip install --quiet --disable-pip-version-check playwright==1.63.0
+          if ! command -v google-chrome >/dev/null; then python -m playwright install --with-deps chromium; fi
+
+      - name: Capture
+        id: capture
+        env:
+          IA_ACCESS_KEY: ${{ secrets.IA_ACCESS_KEY }}
+          IA_SECRET_KEY: ${{ secrets.IA_SECRET_KEY }}
+        run: python capture.py ${{ inputs.ignore_window && '--ignore-window' || '' }}
+
+      - name: Commit capture
+        if: steps.capture.outputs.status == 'captured'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add --sparse archive tsa-certs
+          git commit --quiet -m "Capture ${{ steps.capture.outputs.stamp }}" \
+                     -m "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          for i in 1 2 3 4 5; do
+            git push --quiet && exit 0
+            sleep $((i * 5)); git pull --rebase --quiet
+          done
+          exit 1
+
+      - name: Window over — switch the schedule off
+        if: steps.capture.outputs.status == 'ended'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow disable capture.yml --repo "$GITHUB_REPOSITORY"
