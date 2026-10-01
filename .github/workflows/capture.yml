@@ -4,10 +4,17 @@ on:
   schedule:
     # Every 10 minutes: a quick check each time, plus a full browser capture with
     # screenshots at the first run of every 6-hour block and whenever something
-    # changes (see capture.py). GitHub may start runs a few minutes late.
-    - cron: "3-59/10 * * * *"
+    # changes (see capture.py). GitHub's own scheduler is unreliable (late or skipped
+    # runs), so an outside scheduler also starts a check every 10 minutes through
+    # workflow_dispatch with mode=check. This schedule stays as a backup.
+    - cron: "3,13,23,33,43,53 * * * *"
   workflow_dispatch:
     inputs:
+      mode:
+        description: "full = full capture with screenshots; check = quick check (used by the outside scheduler)"
+        type: choice
+        options: [full, check]
+        default: full
       ignore_window:
         description: "Capture now, even outside the window in config.toml (use this for a test run)"
         type: boolean
@@ -52,7 +59,7 @@ jobs:
           IA_SECRET_KEY: ${{ secrets.IA_SECRET_KEY }}
         run: >
           python capture.py
-          ${{ github.event_name == 'workflow_dispatch' && '--full' || '' }}
+          ${{ github.event_name == 'workflow_dispatch' && inputs.mode != 'check' && '--full' || '' }}
           ${{ inputs.ignore_window && '--ignore-window' || '' }}
 
       - name: Commit
