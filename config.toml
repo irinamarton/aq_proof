@@ -17,27 +17,31 @@ timezone = "Europe/Bucharest"
 start    = "2026-10-01 21:30"
 end      = "2026-11-02 08:00"
 
+[checks]
+full_capture_every_hours = 6   # 1, 2, 3, 4, 6, 8, 12 or 24
+
 # Browser settings — the defaults are fine for most sites
 [browser]
 viewport_width  = 1440
 viewport_height = 900
-settle_seconds  = 3          # extra wait after the page has loaded
+settle_seconds  = 3
 timeout_seconds = 60
 locale          = "en-US"
-# CSS selectors to click before the screenshot, e.g. a cookie banner's "Accept" button:
-# dismiss_selectors = ["#onetrust-accept-btn-handler"]
+# CSS selectors to click before the screenshot, e.g. a cookie banner's "Accept" button
 dismiss_selectors = []
 
-# Wayback Machine (an independent third-party copy, made by the Internet Archive)
+# Wayback Machine (an independent copy, made by the Internet Archive).
+# It accepts only a few copies of the same link per day, so the tool spreads them out:
+# the page about every 6 hours (4 a day) and the PDF about every 24 hours (1 a day).
+# Copies you save by hand on the Wayback Machine count towards its limit too.
 [wayback]
-every_minutes = 60           # at most this often; with 4 captures a day every capture gets one. 0 turns it off
-wait_seconds  = 120          # how long to wait for the Wayback Machine to finish
+enabled      = true
+page_per_day = 4
+pdf_per_day  = 1
+wait_seconds = 120
 
-# ─────────────────────────────────────────────────────────────────────
-#  RFC 3161 Time-Stamp Authorities. Each one signs the SHA-256 of every
-#  capture's manifest.json with its own clock. Two independent ones are
-#  used so the proof doesn't depend on a single company.
-# ─────────────────────────────────────────────────────────────────────
+# RFC 3161 Time-Stamp Authorities. Each one signs the SHA-256 of every
+# record's manifest.json with its own clock.
 [[tsa]]
 name     = "digicert"
 url      = "http://timestamp.digicert.com"
@@ -47,8 +51,3 @@ root_url = "https://cacerts.digicert.com/DigiCertTrustedRootG4.crt.pem"
 name     = "freetsa"
 url      = "https://freetsa.org/tsr"
 root_url = "https://freetsa.org/files/cacert.pem"
-
-# Optional third authority — remove the # signs to enable
-# [[tsa]]
-# name     = "sectigo"
-# url      = "http://timestamp.sectigo.com"
