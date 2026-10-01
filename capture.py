@@ -15,9 +15,10 @@ Runs every 10 minutes (see .github/workflows/capture.yml). Every run:
      runs form one unbroken chain (a missing or edited record breaks it);
   4. gets manifest.json timestamped by independent RFC 3161 Time-Stamp
      Authorities (so the time cannot be back-dated by anyone, including you);
-  5. about once an hour, asks the Internet Archive's Wayback Machine to make
-     its own independent copy of the page and the PDF (a copy that fails, e.g.
-     because the Wayback Machine is busy, is tried again on the next run);
+  5. on every full capture, and about once an hour in between, asks the
+     Internet Archive's Wayback Machine to make its own independent copy of the
+     page and the PDF (a copy that fails, e.g. because the Wayback Machine is
+     busy, is tried again on the next run);
   6. marks the GitHub run as failed (GitHub then emails you) when the page goes
      down, the PDF link disappears, or the PDF goes missing or changes; while a
      problem lasts, it reminds you once per 6-hour block, not every 10 minutes.
@@ -743,7 +744,11 @@ def main() -> int:
     state = load_state(state_path)
 
     out = args.archive / now.strftime("%Y-%m-%d") / now.strftime("%H%M%SZ")
-    out.mkdir(parents=True, exist_ok=False)
+    while out.exists():  # two runs in the same second (only possible when run by hand)
+        time.sleep(1)
+        now = utcnow()
+        out = args.archive / now.strftime("%Y-%m-%d") / now.strftime("%H%M%SZ")
+    out.mkdir(parents=True)
     folder = out.relative_to(args.archive).as_posix()
     rel = out.relative_to(args.archive.parent) if args.archive.parent in out.parents else out
     log(f"Run {iso(now)}  →  {rel}")
@@ -870,9 +875,10 @@ def main() -> int:
     # 5. Wayback Machine (independent third-party copy)
     wb_cfg = cfg.get("wayback", {})
     wb_last = state.setdefault("wayback", {})  # last successful Wayback copy, per link
+    wb_every = int(wb_cfg.get("every_minutes", 60))
+    # every full capture gets its own Wayback copies; quick checks get them about once an hour
     due = [u for u in (cfg["target"]["page_url"], cfg["target"]["pdf_url"])
-           if wayback_due(wb_last.get(u) or state.get("wayback_last_utc"),
-                          int(wb_cfg.get("every_minutes", 60)), now)]
+           if (full and wb_every > 0) or wayback_due(wb_last.get(u) or state.get("wayback_last_utc"), wb_every, now)]
     wb = []
     if due:
         log("Asking the Wayback Machine to capture " +
