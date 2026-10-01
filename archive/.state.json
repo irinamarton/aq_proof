@@ -1,0 +1,13 @@
+{
+  "chain_head": {
+    "folder": "2026-10-01/153625Z",
+    "manifest_sha256": "aac15a66458f71350b85e3af4c84b0608e54d6e8233236f50c0f3ae9740ab554",
+    "capture_utc": "2026-10-01T15:36:25.470Z"
+  },
+  "pdf_sha256": "57c1c3044332ef7c3a5ca8bfb2a19c5f966d3dec1848dee4dc0f7f715267d2cb",
+  "page_text_sha256": "d90d60ccf114b14f6be8175b6f5ec00ca3262ba4e755fe88492080045489cc82",
+  "last_full_block": "2026-10-01/2",
+  "last_full_utc": "2026-10-01T15:36:25.470Z",
+  "wayback_last_utc": "2026-10-01T15:36:25.470Z",
+  "last_alerts": []
+}
