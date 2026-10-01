@@ -16,7 +16,8 @@ Runs every 10 minutes (see .github/workflows/capture.yml). Every run:
   4. gets manifest.json timestamped by independent RFC 3161 Time-Stamp
      Authorities (so the time cannot be back-dated by anyone, including you);
   5. about once an hour, asks the Internet Archive's Wayback Machine to make
-     its own independent copy of the page and the PDF;
+     its own independent copy of the page and the PDF (a copy that fails, e.g.
+     because the Wayback Machine is busy, is tried again on the next run);
   6. marks the GitHub run as failed (GitHub then emails you) when the page goes
      down, the PDF link disappears, or the PDF goes missing or changes; while a
      problem lasts, it reminds you once per 6-hour block, not every 10 minutes.
@@ -301,36 +302,66 @@ def wayback_due(last_utc: str | None, every_minutes: int, now: dt.datetime) -> b
     return now - last >= dt.timedelta(minutes=every_minutes) - dt.timedelta(minutes=3)
 
 
-def wayback_capture(urls: list[str], budget_s: int = 120) -> list[dict]:
+class WaybackBusy(RuntimeError):
+    pass
+
+
+def _wayback_submit(url: str, auth: dict) -> dict:
+    """Ask Save Page Now for a capture; returns {"job_id"} or {"timestamp"}."""
+    if auth:
+        data = urllib.parse.urlencode({"url": url, "capture_all": "1"}).encode()
+        status, h, body, final = http(f"{WAYBACK}/save", data=data, method="POST", timeout=60,
+                                      headers={**auth, "Accept": "application/json"})
+        if status == 429:
+            raise WaybackBusy("HTTP 429")
+        try:
+            j = json.loads(body or b"{}")
+        except ValueError:
+            j = {}
+        if not j.get("job_id"):
+            msg = j.get("message") or f"HTTP {status}"
+            if "limit" in msg.lower() or "too many" in msg.lower():
+                raise WaybackBusy(msg)
+            raise RuntimeError(msg)
+        return {"job_id": j["job_id"]}
+    safe_url = urllib.parse.quote(url, safe=":/?&=%#+@!$,;~*'()[]")
+    status, h, body, final = http(f"{WAYBACK}/save/{safe_url}", timeout=90)
+    if status == 429:
+        raise WaybackBusy("HTTP 429")
+    for cand in (h.get("Content-Location"), h.get("Location"), final):
+        m = re.search(r"/web/(\d{14})/", cand or "")
+        if m:
+            return {"timestamp": m.group(1)}
+    m = re.search(r'watchJob\(\s*"([^"]+)"', body.decode("utf-8", "replace"))
+    if not m:
+        raise RuntimeError(f"Save Page Now gave no job id (HTTP {status})")
+    return {"job_id": m.group(1)}
+
+
+def wayback_capture(urls: list[str], budget_s: int = 120, pause_s: float = 15) -> list[dict]:
+    """Submit each URL with a pause in between; if the Wayback Machine says it is busy
+    (HTTP 429, too many requests), wait and try once more. Then wait for the copies."""
     key, secret = os.environ.get("IA_ACCESS_KEY"), os.environ.get("IA_SECRET_KEY")
     auth = {"Authorization": f"LOW {key}:{secret}"} if key and secret else {}
     jobs = []
-    for url in urls:
+    for i, url in enumerate(urls):
+        if i:
+            time.sleep(pause_s)  # back-to-back requests are what usually triggers HTTP 429
         job = {"url": url, "mode": "api-key" if auth else "anonymous", "submitted_utc": iso(utcnow())}
-        try:
-            if auth:
-                data = urllib.parse.urlencode({"url": url, "capture_all": "1"}).encode()
-                status, h, body, final = http(f"{WAYBACK}/save", data=data, method="POST", timeout=60,
-                                              headers={**auth, "Accept": "application/json"})
-                j = json.loads(body or b"{}")
-                if not j.get("job_id"):
-                    raise RuntimeError(j.get("message") or f"HTTP {status}")
-                job["job_id"] = j["job_id"]
-            else:
-                safe_url = urllib.parse.quote(url, safe=":/?&=%#+@!$,;~*'()[]")
-                status, h, body, final = http(f"{WAYBACK}/save/{safe_url}", timeout=90)
-                for cand in (h.get("Content-Location"), h.get("Location"), final):
-                    m = re.search(r"/web/(\d{14})/", cand or "")
-                    if m:
-                        job["timestamp"] = m.group(1)
-                        break
-                else:
-                    m = re.search(r'watchJob\(\s*"([^"]+)"', body.decode("utf-8", "replace"))
-                    if not m:
-                        raise RuntimeError(f"Save Page Now gave no job id (HTTP {status})")
-                    job["job_id"] = m.group(1)
-        except Exception as e:
-            job["error"] = str(e)
+        for attempt in (1, 2):
+            try:
+                job.update(_wayback_submit(url, auth))
+                job.pop("error", None)
+                break
+            except WaybackBusy as e:
+                job["error"] = (f"the Wayback Machine was busy ({e}, too many requests); "
+                                f"it will be tried again on the next run")
+                if attempt == 1:
+                    time.sleep(pause_s * 2)
+                    job["retried_utc"] = iso(utcnow())
+            except Exception as e:
+                job["error"] = str(e)
+                break
         jobs.append(job)
 
     deadline = time.time() + budget_s
@@ -838,11 +869,15 @@ def main() -> int:
 
     # 5. Wayback Machine (independent third-party copy)
     wb_cfg = cfg.get("wayback", {})
+    wb_last = state.setdefault("wayback", {})  # last successful Wayback copy, per link
+    due = [u for u in (cfg["target"]["page_url"], cfg["target"]["pdf_url"])
+           if wayback_due(wb_last.get(u) or state.get("wayback_last_utc"),
+                          int(wb_cfg.get("every_minutes", 60)), now)]
     wb = []
-    if wayback_due(state.get("wayback_last_utc"), int(wb_cfg.get("every_minutes", 60)), now):
-        log("Asking the Wayback Machine to capture the page and the PDF")
-        wb = wayback_capture([cfg["target"]["page_url"], cfg["target"]["pdf_url"]],
-                             int(wb_cfg.get("wait_seconds", 120)))
+    if due:
+        log("Asking the Wayback Machine to capture " +
+            " and ".join("the PDF" if u == cfg["target"]["pdf_url"] else "the page" for u in due))
+        wb = wayback_capture(due, int(wb_cfg.get("wait_seconds", 120)))
         (out / "wayback.json").write_text(json.dumps(wb, indent=2))
         for j in wb:
             log(f"  {j.get('snapshot_url') or 'failed: ' + j.get('error', '?')}")
@@ -859,8 +894,13 @@ def main() -> int:
         state["last_full_utc"] = iso(now)
         if "page text changed" in reasons:
             state["last_text_full_utc"] = iso(now)
-    if any("snapshot_url" in j for j in wb):
-        state["wayback_last_utc"] = iso(now)
+    legacy = state.pop("wayback_last_utc", None)  # older versions kept one time for both links
+    for u in (cfg["target"]["page_url"], cfg["target"]["pdf_url"]):
+        if legacy and u not in wb_last and u not in due:
+            wb_last[u] = legacy
+    for j in wb:
+        if "snapshot_url" in j:
+            wb_last[j["url"]] = iso(now)
     # email (via a failed run) when a problem starts or changes, and as a reminder
     # once per block while it lasts, rather than every 10 minutes
     notify = bool(alerts) and (sorted(alerts) != sorted(state.get("last_alerts") or []) or new_block)
