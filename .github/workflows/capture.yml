@@ -61,7 +61,8 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add --sparse archive tsa-certs
+          git add --sparse archive
+          git add --sparse tsa-certs 2>/dev/null || true
           git commit --quiet -m "Capture ${{ steps.capture.outputs.stamp }}" \
                      -m "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           for i in 1 2 3 4 5; do
