@@ -1,0 +1,54 @@
+# ─────────────────────────────────────────────────────────────────────
+#  proof-capture settings — edit the three sections marked ✏️
+# ─────────────────────────────────────────────────────────────────────
+
+# ✏️ What to capture
+[target]
+# The web page you want to prove was live
+page_url = "https://www.aquila.ro/rapoarte-si-prezentari/proiect-fuziune-parmafood-2026"
+# The PDF that is linked from that page. Right-click the link → "Copy link address" and paste it here.
+pdf_url  = "https://www.aquila.ro/s/Proiect_Fuziune_Aquila_30_09_2026_execution.pdf"
+
+# ✏️ When to capture. Captures happen 4 times a day (every 6 hours, see
+#    .github/workflows/capture.yml) between start and end; after `end` the
+#    schedule switches itself off. At 4 a day a long window is still free.
+[window]
+timezone = "Europe/Bucharest"
+start    = "2026-10-02 08:00"
+end      = "2026-11-02 08:00"
+
+# Browser settings — the defaults are fine for most sites
+[browser]
+viewport_width  = 1440
+viewport_height = 900
+settle_seconds  = 3          # extra wait after the page has loaded
+timeout_seconds = 60
+locale          = "en-US"
+# CSS selectors to click before the screenshot, e.g. a cookie banner's "Accept" button:
+# dismiss_selectors = ["#onetrust-accept-btn-handler"]
+dismiss_selectors = []
+
+# Wayback Machine (an independent third-party copy, made by the Internet Archive)
+[wayback]
+every_minutes = 60           # at most this often; with 4 captures a day every capture gets one. 0 turns it off
+wait_seconds  = 120          # how long to wait for the Wayback Machine to finish
+
+# ─────────────────────────────────────────────────────────────────────
+#  RFC 3161 Time-Stamp Authorities. Each one signs the SHA-256 of every
+#  capture's manifest.json with its own clock. Two independent ones are
+#  used so the proof doesn't depend on a single company.
+# ─────────────────────────────────────────────────────────────────────
+[[tsa]]
+name     = "digicert"
+url      = "http://timestamp.digicert.com"
+root_url = "https://cacerts.digicert.com/DigiCertTrustedRootG4.crt.pem"
+
+[[tsa]]
+name     = "freetsa"
+url      = "https://freetsa.org/tsr"
+root_url = "https://freetsa.org/files/cacert.pem"
+
+# Optional third authority — remove the # signs to enable
+# [[tsa]]
+# name     = "sectigo"
+# url      = "http://timestamp.sectigo.com"
