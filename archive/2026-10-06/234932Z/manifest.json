@@ -1,0 +1,132 @@
+{
+  "about": "Evidence that the page and the linked PDF were publicly served at the time below. previous_record names the previous run and the SHA-256 of its manifest.json, so all runs form one unbroken chain. The SHA-256 of this file is signed by independent RFC 3161 Time-Stamp Authorities (see timestamps/). Check everything with: python verify.py archive",
+  "tool": "proof-capture 2.0",
+  "type": "check",
+  "full_capture_reasons": [],
+  "previous_record": {
+    "folder": "2026-10-06/201037Z",
+    "manifest_sha256": "f0b284bc87eb366892b106c5b8dfdd03f1bfeee98ddf388b0280c67d1f9b98f5",
+    "capture_utc": "2026-10-06T20:10:37.148Z"
+  },
+  "capture_started_utc": "2026-10-06T23:49:32.882Z",
+  "capture_finished_utc": "2026-10-06T23:49:33.597Z",
+  "capture_started_local": "2026-10-07T02:49:32+03:00",
+  "window": {
+    "start": "2026-10-01T21:30:00+03:00",
+    "end": "2026-11-02T08:00:00+02:00",
+    "ignored": false
+  },
+  "target": {
+    "page_url": "https://www.aquila.ro/rapoarte-si-prezentari/proiect-fuziune-parmafood-2026",
+    "pdf_url": "https://www.aquila.ro/s/Proiect_Fuziune_Aquila_30_09_2026_execution.pdf"
+  },
+  "page": {
+    "url": "https://www.aquila.ro/rapoarte-si-prezentari/proiect-fuziune-parmafood-2026",
+    "method": "plain HTTP request",
+    "loaded": true,
+    "requested_utc": "2026-10-06T23:49:32.883Z",
+    "received_utc": "2026-10-06T23:49:33.234Z",
+    "http_status": 200,
+    "final_url": "https://www.aquila.ro/rapoarte-si-prezentari/proiect-fuziune-parmafood-2026",
+    "headers": {
+      "Accept-Ranges": "bytes",
+      "Age": "1599",
+      "Content-Length": "149315",
+      "Content-Type": "text/html;charset=utf-8",
+      "Date": "Tue, 06 Oct 2026 23:20:30 GMT",
+      "Etag": "W/\"f80db5ec378bdb9dcb378a1bbac87406\"",
+      "Expires": "Thu, 01 Jan 1970 00:00:00 GMT",
+      "Server": "Squarespace",
+      "Set-Cookie": "crumb=Bf9vlv6msgvOMjE5ZTI5ZGQ0Njc3NTM0OGM1MzFjMTk0MjU0NGI1;Secure;Path=/",
+      "Strict-Transport-Security": "max-age=0",
+      "Vary": "Accept-Encoding",
+      "X-Content-Type-Options": "nosniff",
+      "X-Contextid": "C01OvE7B/mvAyUxCG",
+      "Connection": "close"
+    },
+    "bytes": 149315,
+    "title": "Proiect Fuziune Parmafood 2026 &mdash; Aquila",
+    "text_sha256": "d90d60ccf114b14f6be8175b6f5ec00ca3262ba4e755fe88492080045489cc82",
+    "dns": [
+      "198.185.159.144",
+      "198.185.159.145",
+      "198.49.23.144",
+      "198.49.23.145"
+    ]
+  },
+  "pdf": {
+    "url": "https://www.aquila.ro/s/Proiect_Fuziune_Aquila_30_09_2026_execution.pdf",
+    "requested_utc": "2026-10-06T23:49:33.255Z",
+    "received_utc": "2026-10-06T23:49:33.575Z",
+    "http_status": 200,
+    "final_url": "https://static1.squarespace.com/static/5f9280e565985529d8bbf8a5/t/6abd3293467a0c49108a1c2d/1790784147760/Proiect_Fuziune_Aquila_30_09_2026_execution.pdf",
+    "headers": {
+      "Connection": "close",
+      "Content-Length": "557604",
+      "Cache-Control": "public, max-age=94608000",
+      "Content-Type": "application/pdf",
+      "Pragma": "cache",
+      "Server": "Squarespace",
+      "Timing-Allow-Origin": "*",
+      "X-Content-Type-Options": "nosniff",
+      "X-Contextid": "gpzGRlfU/JCcFKPIJ",
+      "Via": "1.1 varnish, 1.1 varnish",
+      "Accept-Ranges": "bytes",
+      "Age": "475786",
+      "Date": "Tue, 06 Oct 2026 23:49:33 GMT",
+      "X-Served-By": "cache-dfw-kdfw8210076-DFW, cache-chi-kmdw8640088-CHI",
+      "X-Cache": "HIT, HIT",
+      "X-Cache-Hits": "9, 0",
+      "X-Timer": "S1791330574.526446,VS0,VE2",
+      "Vary": "Accept-Encoding",
+      "Tracepoint": "Fastly"
+    },
+    "bytes": 557604,
+    "is_pdf": true,
+    "saved_as": "document.pdf",
+    "sha256": "57c1c3044332ef7c3a5ca8bfb2a19c5f966d3dec1848dee4dc0f7f715267d2cb",
+    "original_filename": "Proiect_Fuziune_Aquila_30_09_2026_execution.pdf",
+    "dns": [
+      "140.248.144.238"
+    ]
+  },
+  "pdf_link": {
+    "found": true,
+    "method": "page source",
+    "links_on_page": 105,
+    "matches": [
+      "https://www.aquila.ro/s/Proiect_Fuziune_Aquila_30_09_2026_execution.pdf"
+    ]
+  },
+  "pdf_changed_since_previous_run": false,
+  "page_text_changed_since_previous_run": false,
+  "alerts": [],
+  "files": {
+    "document.pdf": {
+      "sha256": "57c1c3044332ef7c3a5ca8bfb2a19c5f966d3dec1848dee4dc0f7f715267d2cb",
+      "bytes": 557604
+    },
+    "page-source.html": {
+      "sha256": "437f990130f65c22554f685f8413b1dc4dbf574f3dcb5a98e7d21c0f20c5d6b4",
+      "bytes": 149315
+    }
+  },
+  "notes": {
+    "page-source.html": "the page's HTML exactly as the server sent it, before any scripts ran",
+    "document.pdf": "the PDF exactly as the server sent it"
+  },
+  "problems": [],
+  "runner": {
+    "github": {
+      "GITHUB_REPOSITORY": "irinamarton/aq_proof",
+      "GITHUB_RUN_ID": "37548645899",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_SHA": "052219338455b44ebff5077ec492112c3134e4d4",
+      "GITHUB_EVENT_NAME": "schedule",
+      "RUNNER_NAME": "GitHub Actions 1000000035"
+    },
+    "run_url": "https://github.com/irinamarton/aq_proof/actions/runs/37548645899",
+    "os": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+    "python": "3.12.14"
+  }
+}
