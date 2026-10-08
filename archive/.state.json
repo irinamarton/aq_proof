@@ -1,21 +1,23 @@
 {
   "chain_head": {
-    "folder": "2026-10-08/082657Z",
-    "manifest_sha256": "9cec2f338538cd4c3b72a7bf0c0c3c95eee96c9e863f160337db34164c129fe5",
-    "capture_utc": "2026-10-08T08:26:57.423Z"
+    "folder": "2026-10-08/154726Z",
+    "manifest_sha256": "26b072ecddea30a4bbca5f2ee139febe17dea66cf2f7ef1d0b70b271c0012524",
+    "capture_utc": "2026-10-08T15:47:26.187Z"
   },
   "pdf_sha256": "57c1c3044332ef7c3a5ca8bfb2a19c5f966d3dec1848dee4dc0f7f715267d2cb",
-  "page_text_sha256": "d90d60ccf114b14f6be8175b6f5ec00ca3262ba4e755fe88492080045489cc82",
-  "last_full_block": "2026-10-08/1",
-  "last_full_utc": "2026-10-08T08:26:57.423Z",
+  "page_text_sha256": "b164eaba788624b9e7045a0fcfc0c89696973afd1ae3031b564be82015c23b79",
+  "last_full_block": "2026-10-08/2",
+  "last_full_utc": "2026-10-08T15:47:26.187Z",
   "last_alerts": [],
   "wayback_copies": {
     "https://www.aquila.ro/rapoarte-si-prezentari/proiect-fuziune-parmafood-2026": [
       "2026-10-07T17:27:47.893Z",
       "2026-10-08T01:56:51.431Z",
-      "2026-10-08T08:26:57.423Z"
+      "2026-10-08T08:26:57.423Z",
+      "2026-10-08T15:47:26.187Z"
     ],
     "https://www.aquila.ro/s/Proiect_Fuziune_Aquila_30_09_2026_execution.pdf": []
   },
-  "wayback_paused_until": {}
+  "wayback_paused_until": {},
+  "last_text_full_utc": "2026-10-08T15:47:26.187Z"
 }
