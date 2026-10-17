@@ -1,13 +1,13 @@
 {
   "chain_head": {
-    "folder": "2026-10-16/235535Z",
-    "manifest_sha256": "3aebd2e0a42fb6db464d99ff617a16a6fdd015c39572b143a370b15259a7e16c",
-    "capture_utc": "2026-10-16T23:55:35.603Z"
+    "folder": "2026-10-17/024621Z",
+    "manifest_sha256": "b769b3320e988b2535d9b3765dce97285c4033a6def325864fd9136330ff62d1",
+    "capture_utc": "2026-10-17T02:46:21.384Z"
   },
   "pdf_sha256": "57c1c3044332ef7c3a5ca8bfb2a19c5f966d3dec1848dee4dc0f7f715267d2cb",
   "page_text_sha256": "d90d60ccf114b14f6be8175b6f5ec00ca3262ba4e755fe88492080045489cc82",
-  "last_full_block": "2026-10-16/3",
-  "last_full_utc": "2026-10-16T18:45:17.264Z",
+  "last_full_block": "2026-10-17/0",
+  "last_full_utc": "2026-10-17T02:46:21.384Z",
   "last_alerts": [],
   "wayback_copies": {
     "https://www.aquila.ro/rapoarte-si-prezentari/proiect-fuziune-parmafood-2026": [
