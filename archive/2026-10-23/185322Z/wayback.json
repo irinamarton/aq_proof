@@ -1,0 +1,10 @@
+[
+  {
+    "url": "https://www.aquila.ro/s/Proiect_Fuziune_Aquila_30_09_2026_execution.pdf",
+    "mode": "anonymous",
+    "submitted_utc": "2026-10-23T18:53:37.316Z",
+    "error": "could not connect ([Errno 111] Connection refused)",
+    "retry": true,
+    "retried_utc": "2026-10-23T18:54:08.630Z"
+  }
+]
