@@ -1,0 +1,30 @@
+[
+  {
+    "tsa": "digicert",
+    "url": "http://timestamp.digicert.com",
+    "ok": true,
+    "status": "Granted.",
+    "time_raw": "Oct 26 23:29:18 2026 GMT",
+    "time_utc": "2026-10-26T23:29:18.000Z",
+    "serial": "0xD06CD2ABBBB353106CC720A4C9B8ADBB",
+    "tsa_name": "unspecified",
+    "policy": "2.16.840.1.114412.7.1",
+    "hash_algorithm": "sha256",
+    "verified_at_capture": true,
+    "verify_message": "Verification: OK"
+  },
+  {
+    "tsa": "freetsa",
+    "url": "https://freetsa.org/tsr",
+    "ok": true,
+    "status": "Granted.",
+    "time_raw": "Oct 26 23:29:19 2026 GMT",
+    "time_utc": "2026-10-26T23:29:19.000Z",
+    "serial": "0x0976D865",
+    "tsa_name": "DirName:/O=Free TSA/OU=TSA/description=This certificate digitally signs documents and time stamp requests made using the freetsa.org online services/CN=www.freetsa.org/emailAddress=busilezas@mailbox.org/L=Wuerzburg/C=DE/ST=Bayern",
+    "policy": "tsa_policy1",
+    "hash_algorithm": "sha256",
+    "verified_at_capture": true,
+    "verify_message": "Verification: OK"
+  }
+]
