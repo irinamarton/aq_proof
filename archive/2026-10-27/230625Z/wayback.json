@@ -1,0 +1,18 @@
+[
+  {
+    "url": "https://www.aquila.ro/rapoarte-si-prezentari/proiect-fuziune-parmafood-2026",
+    "mode": "anonymous",
+    "submitted_utc": "2026-10-27T23:06:26.775Z",
+    "error": "the Wayback Machine was busy (HTTP 429); it will be tried again on the next run",
+    "retry": true,
+    "retried_utc": "2026-10-27T23:06:57.193Z"
+  },
+  {
+    "url": "https://www.aquila.ro/s/Proiect_Fuziune_Aquila_30_09_2026_execution.pdf",
+    "mode": "anonymous",
+    "submitted_utc": "2026-10-27T23:07:12.446Z",
+    "error": "could not connect ([Errno 111] Connection refused)",
+    "retry": true,
+    "retried_utc": "2026-10-27T23:07:42.685Z"
+  }
+]
