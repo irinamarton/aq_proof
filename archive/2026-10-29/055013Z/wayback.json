@@ -1,0 +1,16 @@
+[
+  {
+    "url": "https://www.aquila.ro/rapoarte-si-prezentari/proiect-fuziune-parmafood-2026",
+    "mode": "anonymous",
+    "submitted_utc": "2026-10-29T05:50:14.744Z",
+    "error": "Save Page Now gave no job id (HTTP 404)",
+    "retry": true
+  },
+  {
+    "url": "https://www.aquila.ro/s/Proiect_Fuziune_Aquila_30_09_2026_execution.pdf",
+    "mode": "anonymous",
+    "submitted_utc": "2026-10-29T05:50:37.139Z",
+    "error": "could not connect (timed out)",
+    "retry": true
+  }
+]
