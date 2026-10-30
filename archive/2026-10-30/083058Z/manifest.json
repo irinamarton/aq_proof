@@ -1,0 +1,259 @@
+{
+  "about": "Evidence that the page and the linked PDF were publicly served at the time below. previous_record names the previous run and the SHA-256 of its manifest.json, so all runs form one unbroken chain. The SHA-256 of this file is signed by independent RFC 3161 Time-Stamp Authorities (see timestamps/). Check everything with: python verify.py archive",
+  "tool": "proof-capture 2.0",
+  "type": "full",
+  "full_capture_reasons": [
+    "first run in this 6-hour block"
+  ],
+  "previous_record": {
+    "folder": "2026-10-30/020309Z",
+    "manifest_sha256": "09cfa07046996326dffe2782bf7407df9bc879097f03a8899ac3c8c14b9d881a",
+    "capture_utc": "2026-10-30T02:03:09.984Z"
+  },
+  "capture_started_utc": "2026-10-30T08:30:58.360Z",
+  "capture_finished_utc": "2026-10-30T08:31:07.453Z",
+  "capture_started_local": "2026-10-30T10:30:58+02:00",
+  "window": {
+    "start": "2026-10-01T21:30:00+03:00",
+    "end": "2026-11-02T08:00:00+02:00",
+    "ignored": false
+  },
+  "target": {
+    "page_url": "https://www.aquila.ro/rapoarte-si-prezentari/proiect-fuziune-parmafood-2026",
+    "pdf_url": "https://www.aquila.ro/s/Proiect_Fuziune_Aquila_30_09_2026_execution.pdf"
+  },
+  "page": {
+    "url": "https://www.aquila.ro/rapoarte-si-prezentari/proiect-fuziune-parmafood-2026",
+    "method": "Chrome browser",
+    "loaded": true,
+    "requested_utc": "2026-10-30T08:31:00.621Z",
+    "final_url": "https://www.aquila.ro/rapoarte-si-prezentari/proiect-fuziune-parmafood-2026",
+    "redirects": [],
+    "http_status": 200,
+    "http_status_text": "",
+    "headers": {
+      "accept-ranges": "bytes",
+      "age": "146670",
+      "content-encoding": "gzip",
+      "content-length": "27555",
+      "content-type": "text/html;charset=utf-8",
+      "date": "Wed, 28 Oct 2026 15:43:30 GMT",
+      "etag": "W/\"822652b75b3bd3382ab6e203a309fcc9--gzip\"",
+      "expires": "Thu, 01 Jan 1970 00:00:00 GMT",
+      "server": "Squarespace",
+      "set-cookie": "crumb=BfCGOe/B6CTjMGQ1NGIzNTc1ZGFmYjlkZWZhYjM3NzVhY2I0ZjE1;Secure;Path=/",
+      "strict-transport-security": "max-age=0",
+      "vary": "Accept-Encoding",
+      "x-content-type-options": "nosniff",
+      "x-contextid": "M2SxN4Xy/2EBC5cUF"
+    },
+    "server_address": {
+      "ipAddress": "198.49.23.145",
+      "port": 443
+    },
+    "tls": {
+      "issuer": "YR1",
+      "protocol": "TLS 1.3",
+      "subjectName": "www.aquila.ro",
+      "validFrom": 1793110126,
+      "validTo": 1800886125,
+      "validFrom_utc": "2026-10-27T14:08:46.000Z",
+      "validTo_utc": "2027-01-25T14:08:45.000Z"
+    },
+    "dns": [
+      "198.185.159.144",
+      "198.185.159.145",
+      "198.49.23.144",
+      "198.49.23.145"
+    ],
+    "clicked_before_capture": [],
+    "title": "Proiect Fuziune Parmafood 2026 — Aquila",
+    "rendered_utc": "2026-10-30T08:31:06.214Z"
+  },
+  "page_source": {
+    "url": "https://www.aquila.ro/rapoarte-si-prezentari/proiect-fuziune-parmafood-2026",
+    "method": "plain HTTP request",
+    "loaded": true,
+    "requested_utc": "2026-10-30T08:30:58.361Z",
+    "received_utc": "2026-10-30T08:30:58.715Z",
+    "http_status": 200,
+    "final_url": "https://www.aquila.ro/rapoarte-si-prezentari/proiect-fuziune-parmafood-2026",
+    "headers": {
+      "Accept-Ranges": "bytes",
+      "Age": "146668",
+      "Content-Length": "156253",
+      "Content-Type": "text/html;charset=utf-8",
+      "Date": "Wed, 28 Oct 2026 15:43:30 GMT",
+      "Etag": "W/\"822652b75b3bd3382ab6e203a309fcc9--gzip\"",
+      "Expires": "Thu, 01 Jan 1970 00:00:00 GMT",
+      "Server": "Squarespace",
+      "Set-Cookie": "crumb=Bf9x3n17VlVVYWQzM2VhNjAyZWU5YjQ2NTU4ZjA0ZjgwYWE1YTUz;Secure;Path=/",
+      "Strict-Transport-Security": "max-age=0",
+      "Vary": "Accept-Encoding",
+      "X-Content-Type-Options": "nosniff",
+      "X-Contextid": "hzF8uVts/EHQKPFAW",
+      "Connection": "close"
+    },
+    "bytes": 156253,
+    "title": "Proiect Fuziune Parmafood 2026 &mdash; Aquila",
+    "text_sha256": "d90d60ccf114b14f6be8175b6f5ec00ca3262ba4e755fe88492080045489cc82",
+    "dns": [
+      "198.185.159.144",
+      "198.185.159.145",
+      "198.49.23.144",
+      "198.49.23.145"
+    ]
+  },
+  "pdf_link": {
+    "found": true,
+    "links_on_page": 105,
+    "matches": [
+      {
+        "index": 92,
+        "href": "https://www.aquila.ro/s/Proiect_Fuziune_Aquila_30_09_2026_execution.pdf",
+        "text": "Proiect Fuziune Parmafood 2026",
+        "x": 483,
+        "y": 131,
+        "width": 278,
+        "height": 20,
+        "visible": true
+      }
+    ],
+    "other_pdf_links": [
+      "https://www.aquila.ro/s/Codul-de-Etic-i-Conduit-in-Afaceri-Aquila.pdf",
+      "https://www.aquila.ro/s/Cod-Conduita-Aquila-2021.pdf",
+      "https://www.aquila.ro/s/RO_Aquila-Responsible-Partnership-Code-final.pdf",
+      "https://www.aquila.ro/s/Ghid-de-utilizare-sistem-de-integritate-21122023.pdf",
+      "https://www.aquila.ro/s/AQ-Politica-de-avertizare-de-integritate_29122025.pdf",
+      "https://www.aquila.ro/s/AQ-Politica-de-achizitii-responsabile_29122025.pdf",
+      "https://www.aquila.ro/s/Codul-de-Etic-i-Conduit-in-Afaceri-Aquila.pdf",
+      "https://www.aquila.ro/s/Cod-Conduita-Aquila-2021.pdf",
+      "https://www.aquila.ro/s/RO_Aquila-Responsible-Partnership-Code-final.pdf",
+      "https://www.aquila.ro/s/Ghid-de-utilizare-sistem-de-integritate-21122023.pdf",
+      "https://www.aquila.ro/s/AQ-Politica-de-avertizare-de-integritate_29122025.pdf",
+      "https://www.aquila.ro/s/AQ-Politica-de-achizitii-responsabile_29122025.pdf",
+      "https://www.aquila.ro/s/Codul-de-Etic-i-Conduit-in-Afaceri-Aquila.pdf",
+      "https://www.aquila.ro/s/Cod-Conduita-Aquila-2021.pdf",
+      "https://www.aquila.ro/s/RO_Aquila-Responsible-Partnership-Code-final.pdf",
+      "https://www.aquila.ro/s/Ghid-de-utilizare-sistem-de-integritate-21122023.pdf",
+      "https://www.aquila.ro/s/AQ-Politica-de-avertizare-de-integritate_29122025.pdf",
+      "https://www.aquila.ro/s/AQ-Politica-de-achizitii-responsabile_29122025.pdf",
+      "https://www.aquila.ro/s/Politica_de_Utilizare_Cookies_AQUILA.pdf",
+      "https://www.aquila.ro/s/Politica_de_confidentialitate_AQUILA.pdf"
+    ],
+    "highlighted": {
+      "index": 92,
+      "href": "https://www.aquila.ro/s/Proiect_Fuziune_Aquila_30_09_2026_execution.pdf",
+      "text": "Proiect Fuziune Parmafood 2026",
+      "x": 483,
+      "y": 131,
+      "width": 278,
+      "height": 20,
+      "visible": true
+    }
+  },
+  "pdf_link_in_page_source": {
+    "found": true,
+    "method": "page source",
+    "links_on_page": 105,
+    "matches": [
+      "https://www.aquila.ro/s/Proiect_Fuziune_Aquila_30_09_2026_execution.pdf"
+    ]
+  },
+  "pdf": {
+    "url": "https://www.aquila.ro/s/Proiect_Fuziune_Aquila_30_09_2026_execution.pdf",
+    "requested_utc": "2026-10-30T08:30:58.718Z",
+    "received_utc": "2026-10-30T08:30:59.048Z",
+    "http_status": 200,
+    "final_url": "https://static1.squarespace.com/static/5f9280e565985529d8bbf8a5/t/6abd3293467a0c49108a1c2d/1790784147760/Proiect_Fuziune_Aquila_30_09_2026_execution.pdf",
+    "headers": {
+      "Connection": "close",
+      "Content-Length": "557604",
+      "Cache-Control": "public, max-age=94608000",
+      "Content-Type": "application/pdf",
+      "Pragma": "cache",
+      "Server": "Squarespace",
+      "Timing-Allow-Origin": "*",
+      "X-Content-Type-Options": "nosniff",
+      "X-Contextid": "cOec5pFR/AY6iXyVr",
+      "Accept-Ranges": "bytes",
+      "Age": "116452",
+      "Date": "Fri, 30 Oct 2026 08:30:58 GMT",
+      "Via": "1.1 varnish",
+      "X-Served-By": "cache-dfw-kdal2120085-DFW",
+      "X-Cache": "HIT",
+      "X-Cache-Hits": "0",
+      "X-Timer": "S1793349059.991249,VS0,VE1",
+      "Vary": "Accept-Encoding",
+      "Tracepoint": "Fastly"
+    },
+    "bytes": 557604,
+    "is_pdf": true,
+    "saved_as": "document.pdf",
+    "sha256": "57c1c3044332ef7c3a5ca8bfb2a19c5f966d3dec1848dee4dc0f7f715267d2cb",
+    "original_filename": "Proiect_Fuziune_Aquila_30_09_2026_execution.pdf",
+    "dns": [
+      "151.101.160.238"
+    ]
+  },
+  "browser": {
+    "engine": "chrome",
+    "version": "156.0.8078.47",
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.8078.47 Safari/537.36",
+    "viewport": [
+      1440,
+      900
+    ]
+  },
+  "pdf_changed_since_previous_run": false,
+  "page_text_changed_since_previous_run": false,
+  "alerts": [],
+  "files": {
+    "document.pdf": {
+      "sha256": "57c1c3044332ef7c3a5ca8bfb2a19c5f966d3dec1848dee4dc0f7f715267d2cb",
+      "bytes": 557604
+    },
+    "link-in-context.png": {
+      "sha256": "c522f6e0ec64dec178d43bf4a34d51e09b511f7ab329d80722453c7750031fb0",
+      "bytes": 78334
+    },
+    "page-source.html": {
+      "sha256": "191114401eb110d7f78ab5162b2147c50f1044b320afa11c8117b2651d017ad8",
+      "bytes": 156253
+    },
+    "page.html": {
+      "sha256": "72dfba94e86cb324f727b9a892a242ac5097ebdb9544fdf2f663e7dba39a2a0e",
+      "bytes": 161410
+    },
+    "page.mhtml": {
+      "sha256": "24e3677f16209ae2083e29a8b17a398150c328b389dd4ab00b121e301f19236f",
+      "bytes": 4084492
+    },
+    "page.png": {
+      "sha256": "b1951b6782a495b00cb9d916b9986b657c5397aaa8f8995ffe46e346a62473c9",
+      "bytes": 113063
+    }
+  },
+  "notes": {
+    "page-source.html": "the page's HTML exactly as the server sent it, before any scripts ran",
+    "document.pdf": "the PDF exactly as the server sent it",
+    "page.png": "full-page screenshot of the page as loaded in Chrome",
+    "page.mhtml": "complete copy of the page as loaded in Chrome (open in Chrome or Edge)",
+    "page.html": "the page's HTML after its scripts ran in Chrome",
+    "link-in-context.png": "the PDF link on the page; the red outline and caption bar were added by this tool AFTER the other files were saved"
+  },
+  "problems": [],
+  "runner": {
+    "github": {
+      "GITHUB_REPOSITORY": "irinamarton/aq_proof",
+      "GITHUB_RUN_ID": "41026940455",
+      "GITHUB_RUN_ATTEMPT": "1",
+      "GITHUB_SHA": "138603e98f3812af639d3c4788cbc82f17ce004c",
+      "GITHUB_EVENT_NAME": "schedule",
+      "RUNNER_NAME": "GitHub Actions 1000000165"
+    },
+    "run_url": "https://github.com/irinamarton/aq_proof/actions/runs/41026940455",
+    "os": "Linux-7.0.0-1017-azure-x86_64-with-glibc2.39",
+    "python": "3.12.15"
+  }
+}
